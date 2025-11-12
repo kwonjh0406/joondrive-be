@@ -45,7 +45,11 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
 
         // 정확한 origin만 허용해야 함 ("*" 금지)
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        config.setAllowedOrigins(List.of(
+                "http://localhost:3000",   // 개발 환경
+                "https://joondrive.com"    // 배포 환경
+        ));
+
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
