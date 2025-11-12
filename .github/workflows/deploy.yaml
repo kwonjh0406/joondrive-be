@@ -1,0 +1,57 @@
+name: CI/CD - Spring Boot Deploy (JDK 25, Password SSH)
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ 코드 체크아웃
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2️⃣ JDK 25 설치
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      # 3️⃣ application-sec.yaml 파일 생성
+      - name: Create secret YAML
+        run: |
+          mkdir -p src/main/resources
+          echo "${{ secrets.APP_SEC_YAML }}" > src/main/resources/application-sec.yaml
+
+      # 4️⃣ Gradle 빌드
+      - name: Build with Gradle
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build -x test
+
+      # 5️⃣ JAR 파일 서버 전송 (비밀번호 기반 SCP)
+      - name: Copy build artifact to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASS }}
+          source: "build/libs/*.jar"
+          target: "/home/${{ secrets.SSH_USER }}/app/"
+
+      # 6️⃣ 서버에서 앱 재시작 (비밀번호 기반 SSH)
+      - name: Restart Spring Boot on server
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASS }}
+          script: |
+            echo ">>> Killing old process..."
+            pkill -f 'java -jar' || true
+
+            echo ">>> Starting new version..."
+            nohup java -jar /home/${{ secrets.SSH_USER }}/app/*.jar > /home/${{ secrets.SSH_USER }}/app/app.log 2>&1 &
