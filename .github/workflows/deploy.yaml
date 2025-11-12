@@ -42,7 +42,7 @@ jobs:
           source: "build/libs/*.jar"
           target: "/home/${{ secrets.SSH_USER }}/app/"
 
-      # 6️⃣ 서버에서 앱 재시작 (비밀번호 기반 SSH)
+           # 6️⃣ 서버에서 앱 재시작 (비밀번호 기반 SSH)
       - name: Restart Spring Boot on server
         uses: appleboy/ssh-action@v1.1.0
         with:
@@ -50,8 +50,18 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASS }}
           script: |
-            echo ">>> Killing old process..."
-            pkill -f 'java -jar' || true
+            echo ">>> Checking for running process..."
+            pid=$(pgrep -f 'java -jar' || echo "")
+            if [ -n "$pid" ]; then
+              echo ">>> Stopping old process (PID: $pid)"
+              kill -9 $pid
+              sleep 3
+            else
+              echo ">>> No running process found"
+            fi
 
             echo ">>> Starting new version..."
             nohup java -jar /home/${{ secrets.SSH_USER }}/app/*.jar > /home/${{ secrets.SSH_USER }}/app/app.log 2>&1 &
+
+            echo ">>> Deployment finished successfully"
+            exit 0
