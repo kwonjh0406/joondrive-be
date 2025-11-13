@@ -9,9 +9,13 @@ import kwonjh0406.joondrive.dto.SignupRequest;
 import kwonjh0406.joondrive.global.ApiResponse;
 import kwonjh0406.joondrive.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -48,10 +52,23 @@ public class AuthController {
         User user = new User();
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setVerified(true);
         userRepository.save(user);
 
         session.setAttribute("user", email); // 로그인 세션
         return ResponseEntity.ok("Signup success");
+    }
+
+    @GetMapping("/verify")
+    public ResponseEntity<?> verify(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            // 세션이 없거나 인증 안된 경우
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("authenticated", false));
+        }
+        System.out.println("ddd");
+        return ResponseEntity.ok(Map.of(
+                "authenticated", true,
+                "email", authentication.getName()
+        ));
     }
 }

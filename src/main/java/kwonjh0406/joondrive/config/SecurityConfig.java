@@ -1,8 +1,12 @@
 package kwonjh0406.joondrive.config;
 
+import jakarta.servlet.http.HttpServletResponse;
+import kwonjh0406.joondrive.auth.service.UserDetailsServiceImpl;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -13,7 +17,11 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import java.util.List;
 
 @Configuration
+@EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final UserDetailsServiceImpl userDetailsService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -26,7 +34,40 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form.disable())
-                .sessionManagement(session -> session.maximumSessions(1));
+                .sessionManagement(session -> session.maximumSessions(1))
+                // ✅ 로그인 (Spring Security가 처리)
+                .formLogin(login -> login
+                        .loginProcessingUrl("/api/auth/login") // React가 POST할 엔드포인트
+                        .usernameParameter("email")
+                        .passwordParameter("password")
+                        .successHandler((req, res, auth) -> {
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write("{\"message\":\"로그인 성공\"}");
+                        })
+                        .failureHandler((req, res, ex) -> {
+                            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write("{\"message\":\"이메일 또는 비밀번호가 올바르지 않습니다.\"}");
+                        })
+                )
+                // ✅ remember-me (자동 로그인)
+                .rememberMe(r -> r
+                        .key("secure-key")
+                        .rememberMeParameter("rememberMe")
+                        .tokenValiditySeconds(60 * 60 * 24 * 7)
+                        .userDetailsService(userDetailsService)
+                )
+                // ✅ 로그아웃
+                .logout(l -> l
+                        .logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((req, res, auth) -> {
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write("{\"message\":\"로그아웃 성공\"}");
+                        })
+                        .invalidateHttpSession(true)
+                        .deleteCookies("JSESSIONID")
+                );
+        ;
 
         return http.build();
     }
