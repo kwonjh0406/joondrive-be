@@ -1,5 +1,6 @@
 package kwonjh0406.joondrive.service;
 
+import kwonjh0406.joondrive.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -16,6 +17,10 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
 
+    @Autowired
+    private UserRepository userRepository;
+
+
     // 이메일 -> 코드 + 발급시간
     private final Map<String, CodeInfo> codeMap = new ConcurrentHashMap<>();
 
@@ -26,6 +31,10 @@ public class EmailService {
      * 인증코드 발급 후 유효시간(초) 반환
      */
     public int sendCode(String email) {
+        if(userRepository.existsByEmail(email)){
+            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+        }
+
         String code = String.format("%06d", random.nextInt(900000) + 100000);
         CodeInfo codeInfo = new CodeInfo(code, Instant.now());
         codeMap.put(email, codeInfo);
