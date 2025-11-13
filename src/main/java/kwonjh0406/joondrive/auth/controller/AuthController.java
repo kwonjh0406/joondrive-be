@@ -3,26 +3,26 @@ package kwonjh0406.joondrive.auth.controller;
 import jakarta.servlet.http.HttpSession;
 import kwonjh0406.joondrive.auth.dto.EmailVerificationRequest;
 import kwonjh0406.joondrive.auth.dto.EmailVerificationResponse;
+import kwonjh0406.joondrive.auth.service.EmailVerificationService;
 import kwonjh0406.joondrive.domain.User;
 import kwonjh0406.joondrive.dto.SignupRequest;
 import kwonjh0406.joondrive.global.ApiResponse;
 import kwonjh0406.joondrive.repository.UserRepository;
-import kwonjh0406.joondrive.service.EmailService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @Autowired
-    private UserRepository userRepository;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-    @Autowired
-    private EmailService emailService;
+    private final UserRepository userRepository;
+
+    private final PasswordEncoder passwordEncoder;
+
+    private final EmailVerificationService emailService;
 
     @PostMapping("/verification-codes")
     public ResponseEntity<ApiResponse<EmailVerificationResponse>> sendCode(@RequestBody EmailVerificationRequest request) {
