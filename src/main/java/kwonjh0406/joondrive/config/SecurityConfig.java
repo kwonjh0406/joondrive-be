@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -45,7 +46,7 @@ public class SecurityConfig {
                 .formLogin(login -> login.loginProcessingUrl("/api/auth/login")
                         .usernameParameter("email")
                         .passwordParameter("password")
-                        .successHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_OK))
+                        .successHandler(new SavedRequestAwareAuthenticationSuccessHandler())
                         .failureHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
                 )
                 // 자동로그인
