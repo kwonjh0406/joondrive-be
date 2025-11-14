@@ -40,8 +40,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                // 시큐리티 기본 폼 로그인 비활성화
-                .formLogin(AbstractHttpConfigurer::disable)
                 // 로그인 처리
                 .formLogin(login -> login.loginProcessingUrl("/api/auth/login")
                         .usernameParameter("email")
