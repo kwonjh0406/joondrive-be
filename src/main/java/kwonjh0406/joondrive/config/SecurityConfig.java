@@ -7,7 +7,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
@@ -23,82 +24,71 @@ public class SecurityConfig {
 
     private final UserDetailsServiceImpl userDetailsService;
 
+    /**
+     * 스프링 시큐리티 메인 설정
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) {
         http
-                .csrf(csrf -> csrf.disable())
-                // ✅ cors 필터를 SecurityFilterChain 내부에서 명시적으로 등록
+                // CSRF 비활성화
+                .csrf(AbstractHttpConfigurer::disable)
+                // CORS 설정 활성화
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // 인증/인가 영역 설정
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .formLogin(form -> form.disable())
-                .sessionManagement(session -> session.maximumSessions(1))
-                // ✅ 로그인 (Spring Security가 처리)
-                .formLogin(login -> login
-                        .loginProcessingUrl("/api/auth/login") // React가 POST할 엔드포인트
+                // 시큐리티 기본 폼 로그인 비활성화
+                .formLogin(AbstractHttpConfigurer::disable)
+                // 로그인 처리
+                .formLogin(login -> login.loginProcessingUrl("/api/auth/login")
                         .usernameParameter("email")
                         .passwordParameter("password")
-                        .successHandler((req, res, auth) -> {
-                            res.setContentType("application/json;charset=UTF-8");
-                            res.getWriter().write("{\"message\":\"로그인 성공\"}");
-                        })
-                        .failureHandler((req, res, ex) -> {
-                            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            res.setContentType("application/json;charset=UTF-8");
-                            res.getWriter().write("{\"message\":\"이메일 또는 비밀번호가 올바르지 않습니다.\"}");
-                        })
+                        .successHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_OK))
+                        .failureHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
                 )
-                // ✅ remember-me (자동 로그인)
-                .rememberMe(r -> r
-                        .key("secure-key")
-                        .rememberMeParameter("rememberMe")
-                        .tokenValiditySeconds(60 * 60 * 24 * 7)
-                        .userDetailsService(userDetailsService)
-                )
-                // ✅ 로그아웃
-                .logout(l -> l
-                        .logoutUrl("/api/auth/logout")
-                        .logoutSuccessHandler((req, res, auth) -> {
-                            res.setContentType("application/json;charset=UTF-8");
-                            res.getWriter().write("{\"message\":\"로그아웃 성공\"}");
-                        })
+                // 자동로그인
+                .rememberMe(r -> r.key("secure-key").rememberMeParameter("rememberMe").tokenValiditySeconds(60 * 60 * 24 * 7).userDetailsService(userDetailsService))
+                // 로그아웃 처리
+                .logout(l -> l.logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_OK))
                         .invalidateHttpSession(true)
-                        .deleteCookies("JSESSIONID")
-                );
-        ;
+                        .deleteCookies("JSESSIONID"));
 
         return http.build();
     }
 
+    /**
+     * 사용자 비밀번호 암호화에 사용
+     * - bcrypt 방식 암호화
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 
-    // ✅ 진짜 핵심 부분
+    /**
+     * CORS 설정
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // 반드시 true — 프론트에서 credentials: include 사용할 경우 필수
+        // JSESSIONID를 받기 위해 필요하다. 프론트에서는 API 요청에 Credentials를 포함시켜야 한다.
         config.setAllowCredentials(true);
 
-        // 정확한 origin만 허용해야 함 ("*" 금지)
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",   // 개발 환경
-                "https://joondrive.com"    // 배포 환경
-        ));
+        // 허용할 요청의 출처 목록
+        config.setAllowedOrigins(List.of("http://localhost:3000", "https://joondrive.com"));
 
-
+        // 허용할 HTTP Methods
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
-
-        // 모든 경로에 적용
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+
         return source;
     }
 }
