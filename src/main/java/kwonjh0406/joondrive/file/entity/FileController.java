@@ -27,8 +27,8 @@ import java.util.UUID;
 class FileController {
 
     private final FileRepository fileRepository;
-
-    private static final String BASE_STORAGE_PATH = "/Users/joonhyung";
+s=
+    private static final String BASE_STORAGE_PATH = "/joondrive";
     private final UserRepository userRepository;
 
     private Path getUserBasePath(Long userId) throws IOException {
