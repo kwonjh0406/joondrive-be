@@ -27,7 +27,7 @@ import java.util.UUID;
 class FileController {
 
     private final FileRepository fileRepository;
-s=
+
     private static final String BASE_STORAGE_PATH = "/joondrive";
     private final UserRepository userRepository;
 
