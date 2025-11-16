@@ -3,6 +3,7 @@ package kwonjh0406.joondrive.config;
 import jakarta.servlet.http.HttpServletResponse;
 import kwonjh0406.joondrive.auth.service.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -11,7 +12,6 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -23,6 +23,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    @Value("${security.cors.allowed-origins}")
+    private String allowedOrigin;
     private final UserDetailsServiceImpl userDetailsService;
 
     /**
@@ -44,7 +46,7 @@ public class SecurityConfig {
                 .formLogin(login -> login.loginProcessingUrl("/api/auth/login")
                         .usernameParameter("email")
                         .passwordParameter("password")
-                        .successHandler(new SavedRequestAwareAuthenticationSuccessHandler())
+                        .successHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_OK))
                         .failureHandler((_, res, _) -> res.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
                 )
                 // 자동로그인
@@ -78,7 +80,7 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
 
         // 허용할 요청의 출처 목록
-        config.setAllowedOrigins(List.of("http://localhost:3000", "https://joondrive.com"));
+        config.setAllowedOrigins(List.of(allowedOrigin));
 
         // 허용할 HTTP Methods
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));

@@ -5,6 +5,7 @@ import kwonjh0406.joondrive.domain.User;
 import kwonjh0406.joondrive.file.repository.FileRepository;
 import kwonjh0406.joondrive.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,7 +29,8 @@ class FileController {
 
     private final FileRepository fileRepository;
 
-    private static final String BASE_STORAGE_PATH = "/joondrive";
+    @Value("${storage.base-path}")
+    private String BASE_STORAGE_PATH;
     private final UserRepository userRepository;
 
     private Path getUserBasePath(Long userId) throws IOException {
