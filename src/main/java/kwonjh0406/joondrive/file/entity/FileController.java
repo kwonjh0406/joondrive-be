@@ -8,6 +8,10 @@ import kwonjh0406.joondrive.file.repository.FileRepository;
 import kwonjh0406.joondrive.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -122,6 +126,54 @@ class FileController {
             fileRepository.delete(file);
         }
         return ResponseEntity.ok("삭제 완료");
+    }
+
+    // 파일 다운로드
+    @GetMapping("/download/{fileId}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long fileId, HttpServletRequest req) throws IOException {
+        Long userId = getUserId();
+        
+        // 파일 조회
+        FileEntity file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new RuntimeException("파일을 찾을 수 없습니다."));
+        
+        // 권한 확인: 본인 파일인지 확인
+        if (!file.getUserId().equals(userId)) {
+            throw new RuntimeException("파일 다운로드 권한이 없습니다.");
+        }
+        
+        // 파일 타입 확인: 폴더는 다운로드 불가
+        if (!"file".equals(file.getFileType())) {
+            throw new RuntimeException("폴더는 다운로드할 수 없습니다.");
+        }
+        
+        // 실제 파일 경로 확인
+        if (file.getRealPath() == null || file.getRealPath().isEmpty()) {
+            throw new RuntimeException("파일 경로가 없습니다.");
+        }
+        
+        Path filePath = Paths.get(file.getRealPath());
+        if (!Files.exists(filePath)) {
+            throw new RuntimeException("파일이 존재하지 않습니다.");
+        }
+        
+        // 파일을 Resource로 변환
+        Resource resource = new FileSystemResource(filePath);
+        
+        // 파일명 인코딩 (한글 파일명 지원)
+        String fileName = file.getName();
+        String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
+        
+        // 응답 헤더 설정
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, 
+                "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''" + encodedFileName);
+        headers.add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        
+        return ResponseEntity.ok()
+                .headers(headers)
+                .contentLength(Files.size(filePath))
+                .body(resource);
     }
 
     // 폴더 생성
