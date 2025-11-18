@@ -4,7 +4,7 @@ import jakarta.servlet.http.HttpSession;
 import kwonjh0406.joondrive.auth.dto.EmailVerificationRequest;
 import kwonjh0406.joondrive.auth.dto.EmailVerificationResponse;
 import kwonjh0406.joondrive.auth.service.EmailVerificationService;
-import kwonjh0406.joondrive.domain.User;
+import kwonjh0406.joondrive.auth.entity.User;
 import kwonjh0406.joondrive.dto.SignupRequest;
 import kwonjh0406.joondrive.global.ApiResponse;
 import kwonjh0406.joondrive.repository.UserRepository;
@@ -65,10 +65,13 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("authenticated", false));
         }
-        System.out.println("ddd");
         return ResponseEntity.ok(Map.of(
                 "authenticated", true,
-                "email", authentication.getName()
+                "email", authentication.getName(),
+                "storageLimit", userRepository.findByEmail(authentication.getName()).get().getStorageLimit(),
+                "usedStorage", 1
         ));
     }
+
+
 }

@@ -1,8 +1,7 @@
 package kwonjh0406.joondrive.repository;
 
-import kwonjh0406.joondrive.domain.User;
+import kwonjh0406.joondrive.auth.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 

@@ -1,6 +1,6 @@
 package kwonjh0406.joondrive.auth.service;
 
-import kwonjh0406.joondrive.domain.User;
+import kwonjh0406.joondrive.auth.entity.User;
 import kwonjh0406.joondrive.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;

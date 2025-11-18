@@ -1,7 +1,9 @@
 package kwonjh0406.joondrive.file.entity;
 
 import jakarta.servlet.http.HttpServletRequest;
-import kwonjh0406.joondrive.domain.User;
+import kwonjh0406.joondrive.auth.entity.User;
+import kwonjh0406.joondrive.drive.service.DriveService;
+import kwonjh0406.joondrive.file.exception.StorageLimitExceededException;
 import kwonjh0406.joondrive.file.repository.FileRepository;
 import kwonjh0406.joondrive.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +15,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,6 +33,7 @@ class FileController {
     @Value("${storage.base-path}")
     private String BASE_STORAGE_PATH;
     private final UserRepository userRepository;
+    private final DriveService driveService;
 
     private Path getUserBasePath(Long userId) throws IOException {
         Path base = Paths.get(BASE_STORAGE_PATH).resolve(userId.toString());
@@ -53,6 +55,26 @@ class FileController {
                                               @RequestParam(required = false) Long parentId,
                                               HttpServletRequest req) throws IOException {
         Long userId = getUserId();
+        
+        // 업로드할 파일들의 총 크기 계산
+        long totalUploadSize = files.stream()
+                .filter(file -> !file.isEmpty())
+                .mapToLong(MultipartFile::getSize)
+                .sum();
+        
+        // 현재 사용량과 한도 확인
+        long currentUsedStorage = driveService.getUsedStorage(userId);
+        long storageLimit = driveService.getStorageLimit(userId);
+        
+        // 업로드 후 예상 사용량이 한도를 초과하는지 검증
+        if (currentUsedStorage + totalUploadSize > storageLimit) {
+            long availableSpace = storageLimit - currentUsedStorage;
+            throw new StorageLimitExceededException(
+                    String.format("스토리지 한도를 초과합니다. 사용 가능한 용량: %d 바이트 (%.2f MB)", 
+                            availableSpace, availableSpace / (1024.0 * 1024.0))
+            );
+        }
+        
         Path userBase = getUserBasePath(userId);
 
         for (MultipartFile multipartFile : files) {
