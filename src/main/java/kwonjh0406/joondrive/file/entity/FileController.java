@@ -3,6 +3,7 @@ package kwonjh0406.joondrive.file.entity;
 import jakarta.servlet.http.HttpServletRequest;
 import kwonjh0406.joondrive.auth.entity.User;
 import kwonjh0406.joondrive.drive.service.DriveService;
+import kwonjh0406.joondrive.file.dto.MoveRequest;
 import kwonjh0406.joondrive.file.exception.StorageLimitExceededException;
 import kwonjh0406.joondrive.file.repository.FileRepository;
 import kwonjh0406.joondrive.repository.UserRepository;
@@ -192,6 +193,87 @@ class FileController {
 
         fileRepository.save(folder);
         return ResponseEntity.ok(folder);
+    }
+
+    // 파일 이동
+    @PutMapping("/move")
+    public ResponseEntity<String> moveFile(@RequestBody MoveRequest moveRequest, HttpServletRequest req) {
+        Long userId = getUserId();
+        Long fileId = moveRequest.getFileId();
+        Long newParentId = moveRequest.getNewParentId();
+
+        // 이동할 파일 조회
+        FileEntity fileToMove = fileRepository.findById(fileId)
+                .orElseThrow(() -> new RuntimeException("파일을 찾을 수 없습니다."));
+
+        // 사용자 소유권 확인
+        if (!fileToMove.getUserId().equals(userId)) {
+            throw new RuntimeException("파일 이동 권한이 없습니다.");
+        }
+
+        // newParentId가 null이 아닌 경우 검증
+        if (newParentId != null) {
+            // 새로운 부모 폴더 조회
+            FileEntity newParent = fileRepository.findById(newParentId)
+                    .orElseThrow(() -> new RuntimeException("대상 폴더를 찾을 수 없습니다."));
+
+            // 사용자 소유권 확인
+            if (!newParent.getUserId().equals(userId)) {
+                throw new RuntimeException("대상 폴더에 대한 권한이 없습니다.");
+            }
+
+            // 폴더 타입 확인 (파일은 부모가 될 수 없음)
+            if (!"folder".equals(newParent.getFileType())) {
+                throw new RuntimeException("대상은 폴더여야 합니다.");
+            }
+
+            // 순환 참조 방지: 자기 자신을 부모로 설정하는 것 방지
+            if (fileId.equals(newParentId)) {
+                throw new RuntimeException("자기 자신을 부모 폴더로 설정할 수 없습니다.");
+            }
+
+            // 순환 참조 방지: newParentId가 fileId의 하위 폴더인지 확인 (폴더가 자기 자신의 하위로 이동하는 것 방지)
+            if (isDescendantOf(newParentId, fileId, userId)) {
+                throw new RuntimeException("하위 폴더를 부모 폴더로 설정할 수 없습니다.");
+            }
+        }
+
+        // parentId 업데이트
+        fileToMove.setParentId(newParentId);
+        fileRepository.save(fileToMove);
+
+        return ResponseEntity.ok("파일 이동 완료");
+    }
+
+    // 순환 참조 체크: descendantId가 ancestorId의 하위 폴더인지 확인하는 메서드
+    // descendantId의 부모 체인을 따라가면서 ancestorId를 만나는지 확인
+    private boolean isDescendantOf(Long descendantId, Long ancestorId, Long userId) {
+        // descendantId가 폴더인지 확인 (폴더가 아니면 하위가 없으므로 체크 불필요)
+        FileEntity descendant = fileRepository.findById(descendantId).orElse(null);
+        if (descendant == null || !"folder".equals(descendant.getFileType())) {
+            return false;
+        }
+
+        // 재귀적으로 부모 체인을 따라가면서 ancestorId를 만나는지 확인
+        Long currentParentId = descendant.getParentId();
+        int maxDepth = 100; // 무한 루프 방지
+        int depth = 0;
+
+        while (currentParentId != null && depth < maxDepth) {
+            if (currentParentId.equals(ancestorId)) {
+                return true; // descendant가 ancestor의 하위 폴더임
+            }
+
+            FileEntity parent = fileRepository.findById(currentParentId).orElse(null);
+            if (parent == null || !parent.getUserId().equals(userId)) {
+                break;
+            }
+
+            currentParentId = parent.getParentId();
+            depth++;
+        }
+
+        return false;
     }
 
     public Long getUserId() {
