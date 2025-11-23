@@ -9,6 +9,7 @@ import kwonjh0406.joondrive.file.repository.FileRepository;
 import kwonjh0406.joondrive.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -20,13 +21,16 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @RestController
 @RequiredArgsConstructor
@@ -193,6 +197,168 @@ class FileController {
 
         fileRepository.save(folder);
         return ResponseEntity.ok(folder);
+    }
+
+    // 다중 파일 ZIP 다운로드
+    @PostMapping("/download/zip")
+    public ResponseEntity<Resource> downloadFilesAsZip(@RequestBody List<Long> fileIds, HttpServletRequest req) {
+        Long userId = getUserId();
+
+        // 요청 검증: 빈 배열 체크
+        if (fileIds == null || fileIds.isEmpty()) {
+            throw new RuntimeException("다운로드할 파일을 선택해주세요.");
+        }
+
+        // 파일 조회 및 권한 확인
+        List<FileEntity> filesToDownload = new ArrayList<>();
+        for (Long fileId : fileIds) {
+            FileEntity file = fileRepository.findById(fileId)
+                    .orElse(null);
+            
+            if (file == null) {
+                continue; // 존재하지 않는 파일은 무시
+            }
+
+            // 권한 확인: 본인 파일인지 확인
+            if (!file.getUserId().equals(userId)) {
+                throw new RuntimeException("다운로드할 권한이 없는 파일이 포함되어 있습니다.");
+            }
+
+            filesToDownload.add(file);
+        }
+
+        // 다운로드할 파일이 없는 경우
+        if (filesToDownload.isEmpty()) {
+            throw new RuntimeException("다운로드할 파일을 찾을 수 없습니다.");
+        }
+
+        try {
+            // ZIP 파일 생성
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ZipOutputStream zos = new ZipOutputStream(baos);
+            
+            // 파일명 충돌 방지를 위한 Set (이미 사용된 경로 추적)
+            Set<String> usedPaths = new HashSet<>();
+
+            for (FileEntity file : filesToDownload) {
+                addToZip(zos, file, "", userId, usedPaths);
+            }
+
+            zos.close();
+            byte[] zipBytes = baos.toByteArray();
+
+            // 응답 생성
+            ByteArrayResource resource = new ByteArrayResource(zipBytes);
+
+            // 파일명 인코딩 (한글 파일명 지원)
+            String fileName = "download.zip";
+            String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.add(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''" + encodedFileName);
+            headers.setContentLength(zipBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(resource);
+
+        } catch (IOException e) {
+            throw new RuntimeException("압축 파일 생성 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    // ZIP에 파일/폴더를 재귀적으로 추가하는 메서드
+    private void addToZip(ZipOutputStream zos, FileEntity file, String basePath, Long userId, Set<String> usedPaths) throws IOException {
+        String entryName = basePath + file.getName();
+        
+        if ("folder".equals(file.getFileType())) {
+            // 폴더인 경우: 먼저 "/" 추가 후 충돌 체크
+            if (!entryName.endsWith("/")) {
+                entryName += "/";
+            }
+            
+            // 파일명 충돌 처리 (폴더 경로로)
+            entryName = resolveNameConflict(entryName, usedPaths);
+            usedPaths.add(entryName);
+            
+            // 빈 폴더도 ZIP에 포함 (일부 ZIP 뷰어에서 필요)
+            ZipEntry folderEntry = new ZipEntry(entryName);
+            zos.putNextEntry(folderEntry);
+            zos.closeEntry();
+
+            // 하위 파일들 조회 및 재귀적으로 추가
+            List<FileEntity> children = fileRepository.findByUserIdAndParentId(userId, file.getId());
+            for (FileEntity child : children) {
+                addToZip(zos, child, entryName, userId, usedPaths);
+            }
+        } else {
+            // 파일인 경우: 파일명 충돌 처리
+            entryName = resolveNameConflict(entryName, usedPaths);
+            usedPaths.add(entryName);
+            
+            // 실제 파일 내용 추가
+            if (file.getRealPath() == null || file.getRealPath().isEmpty()) {
+                return; // 경로가 없는 파일은 건너뛰기
+            }
+
+            Path filePath = Paths.get(file.getRealPath());
+            if (!Files.exists(filePath)) {
+                return; // 존재하지 않는 파일은 건너뛰기
+            }
+
+            ZipEntry entry = new ZipEntry(entryName);
+            zos.putNextEntry(entry);
+
+            // 파일 내용 읽기 및 ZIP에 쓰기
+            try (FileInputStream fis = new FileInputStream(filePath.toFile())) {
+                byte[] buffer = new byte[8192];
+                int length;
+                while ((length = fis.read(buffer)) > 0) {
+                    zos.write(buffer, 0, length);
+                }
+            }
+
+            zos.closeEntry();
+        }
+    }
+
+    // 파일명 충돌 해결 메서드
+    private String resolveNameConflict(String entryName, Set<String> usedPaths) {
+        if (!usedPaths.contains(entryName)) {
+            return entryName;
+        }
+
+        // 충돌이 발생하면 번호를 추가
+        String baseName;
+        String extension = "";
+        boolean isFolder = entryName.endsWith("/");
+
+        if (isFolder) {
+            baseName = entryName.substring(0, entryName.length() - 1);
+        } else {
+            int lastDot = entryName.lastIndexOf('.');
+            if (lastDot > 0) {
+                baseName = entryName.substring(0, lastDot);
+                extension = entryName.substring(lastDot);
+            } else {
+                baseName = entryName;
+            }
+        }
+
+        int counter = 1;
+        String newName;
+        do {
+            newName = baseName + "(" + counter + ")" + extension;
+            if (isFolder) {
+                newName += "/";
+            }
+            counter++;
+        } while (usedPaths.contains(newName) && counter < 1000); // 무한 루프 방지
+
+        return newName;
     }
 
     // 파일 이동
