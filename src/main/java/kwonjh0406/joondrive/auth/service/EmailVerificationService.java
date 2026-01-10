@@ -1,15 +1,17 @@
 package kwonjh0406.joondrive.auth.service;
 
-import kwonjh0406.joondrive.auth.exception.EmailAlreadyExistsException;
-import kwonjh0406.joondrive.repository.UserRepository;
+import kwonjh0406.joondrive.auth.entity.VerificationCode;
+import kwonjh0406.joondrive.auth.repository.UserRepository;
+import kwonjh0406.joondrive.auth.repository.VerificationCodeRepository;
+import kwonjh0406.joondrive.common.exception.CustomException;
+import kwonjh0406.joondrive.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -17,33 +19,48 @@ public class EmailVerificationService {
 
     private final JavaMailSender mailSender;
     private final UserRepository userRepository;
-    private final Map<String, CodeInfo> codeMap = new ConcurrentHashMap<>();
+    private final VerificationCodeRepository verificationCodeRepository;
 
     private static final int EXPIRE_SECONDS = 300;
 
+    @Transactional
     public int sendCode(String email) {
         if (userRepository.existsByEmail(email)) {
-            throw new EmailAlreadyExistsException("이미 가입된 이메일입니다.");
+            // throw new EmailAlreadyExistsException("이미 가입된 이메일입니다.");
+            // Using CustomException standardized
+            throw new CustomException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
         String code = generateCode();
-        codeMap.put(email, new CodeInfo(code, Instant.now()));
+        LocalDateTime expiryDate = LocalDateTime.now().plusSeconds(EXPIRE_SECONDS);
+
+        VerificationCode verificationCode = verificationCodeRepository.findById(email)
+                .orElse(new VerificationCode(email, code, expiryDate));
+
+        verificationCode.updateCode(code, expiryDate);
+        verificationCodeRepository.save(verificationCode);
+
         sendEmail(email, code);
 
         return EXPIRE_SECONDS;
     }
 
+    @Transactional
     public boolean verifyCode(String email, String code) {
-        CodeInfo codeInfo = codeMap.get(email);
-        if (codeInfo == null) return false;
+        VerificationCode verificationCode = verificationCodeRepository.findById(email).orElse(null);
 
-        if (isExpired(codeInfo)) {
-            codeMap.remove(email);
+        if (verificationCode == null)
+            return false;
+
+        if (verificationCode.isExpired()) {
+            verificationCodeRepository.delete(verificationCode);
             return false;
         }
 
-        boolean isValid = codeInfo.code().equals(code);
-        if (isValid) codeMap.remove(email);
+        boolean isValid = verificationCode.getCode().equals(code);
+        if (isValid) {
+            verificationCodeRepository.delete(verificationCode);
+        }
         return isValid;
     }
 
@@ -54,16 +71,8 @@ public class EmailVerificationService {
     private void sendEmail(String email, String code) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(email);
-        message.setSubject("[" + code + "] Joon Drive");
-        message.setText("다음 인증번호를 입력하여 회원가입을 마무리하세요.\n\n" +
-                "인증번호: " + code);
+        message.setSubject("Joon Drive - 이메일 인증");
+        message.setText("인증번호: " + code + "\n\n5분 이내에 입력해주세요.");
         mailSender.send(message);
-    }
-
-    private boolean isExpired(CodeInfo codeInfo) {
-        return java.time.Duration.between(codeInfo.createdAt(), Instant.now()).getSeconds() >= EXPIRE_SECONDS;
-    }
-
-    private record CodeInfo(String code, Instant createdAt) {
     }
 }
