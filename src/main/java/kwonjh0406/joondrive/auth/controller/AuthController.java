@@ -13,7 +13,6 @@ import kwonjh0406.joondrive.common.exception.CustomException;
 import kwonjh0406.joondrive.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -23,12 +22,12 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-
     private final AuthService authService;
     private final EmailVerificationService emailService;
 
     @PostMapping("/verification-codes")
-    public ResponseEntity<ApiResponse<EmailVerificationResponse>> sendCode(@RequestBody EmailVerificationRequest request) {
+    public ResponseEntity<ApiResponse<EmailVerificationResponse>> sendCode(
+            @RequestBody EmailVerificationRequest request) {
         int expiresIn = emailService.sendCode(request.getEmail());
         EmailVerificationResponse response = new EmailVerificationResponse(expiresIn);
         return ResponseEntity.ok(ApiResponse.ok(response, "인증번호가 발송되었습니다."));
@@ -45,7 +44,7 @@ public class AuthController {
         if (userDetails == null) {
             throw new CustomException(ErrorCode.UNAUTHORIZED_ACCESS);
         }
-        
+
         User user = userDetails.getUser();
 
         return ResponseEntity.ok(ApiResponse.ok(Map.of(
