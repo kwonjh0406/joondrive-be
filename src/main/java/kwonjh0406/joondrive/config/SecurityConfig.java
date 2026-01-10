@@ -20,6 +20,7 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
+@EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
     private final UserDetailsServiceImpl userDetailsService;
