@@ -8,7 +8,7 @@ import java.util.List;
 
 @Getter
 @Setter
-@ConfigurationProperties(prefix = "cors")
+@ConfigurationProperties(prefix = "security.cors")
 public class CorsProperties {
     private List<String> allowedOrigins;
 }
